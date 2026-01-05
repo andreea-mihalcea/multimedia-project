@@ -1,143 +1,119 @@
 window.onload = function () {
     const canvas = document.getElementById('sky');
     const ctx = canvas.getContext('2d');
-
-    const AUDIO_FILE_PATH = 'fireworks-07-419025.mp3'
-
-    let audioCtx = null;
-    let audioBuffer = null;
-    let isAudioInitialized = false;
-
-    async function loadAudio(url) {
-        console.log('Attempting to load audio from: ', url);
-        try {
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error('HTTP error! Status: ${response.status}');
-            }
-
-            const arrayBuffer = await response.arrayBuffer();
-            audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-            console.log('Audio file successfully loaded and decoded.');
-        } catch (error) {
-            console.error('Error loading or decoding audio file. Please check the path and format.', error);
-        }
-    }
-
-    function initAudioContext() {
-        if (!isAudioInitialized) {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            isAudioInitialized = true;
-            loadAudio(AUDIO_FILE_PATH);
-        }
-    }
-
-    function playFireworkSound() {
-        if (!audioCtx || !audioBuffer) {
-            return;
-        }
-
-        const source = audioCtx.createBufferSource();
-        source.buffer = audioBuffer;
-
-        source.playbackRate.value = 0.95 + Math.random() * 0.1;
-
-        source.connect(audioCtx.destination);
-
-        source.start(0);
-    }
+    const video = document.getElementById('bgVideo');
+    const music = document.getElementById('bgMusic');
 
     let particles = [];
+    let textAlpha = 0;
+    let audioCtx = null;
+
+    function playInternalPop() {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        oscillator.type = 'triangle';
+        
+        oscillator.frequency.setValueAtTime(150, audioCtx.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+
+        gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.1);
+    }
 
     function resizeCanvas() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
     }
-
-    resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
 
     class Particle {
-        constructor(x, y, color, angle, distance) {
-            this.x = x;
-            this.y = y;
-            this.color = color;
-            this.radius = 2 + Math.random() * 2;
+        constructor(x, y, hue) {
+            this.x = x; this.y = y; this.hue = hue;
             this.alpha = 1;
-
-            const duration = 1.0 + Math.random() * 0.4;
-
-            const targetX = Math.cos(angle) * distance;
-            const targetY = Math.sin(angle) * distance;
-
-            const totalFrames = duration * 60;
-            this.vx = targetX / totalFrames;
-            this.vy = targetY / totalFrames;
-
-            this.timeRemaining = totalFrames;
+            this.decay = Math.random() * 0.015 + 0.01;
+            const angle = Math.random() * Math.PI * 2;
+            const force = Math.random() * 10 + 5;
+            this.vx = Math.cos(angle) * force;
+            this.vy = Math.sin(angle) * force;
+            this.friction = 0.95;
+            this.gravity = 0.12;
+            this.radius = Math.random() * 3 + 2;
         }
 
         update() {
-            if (this.timeRemaining > 0) {
-                this.x += this.vx;
-                this.y += this.vy;
-
-                this.alpha -= 1 / (this.timeRemaining * 1.5);
-                this.timeRemaining--;
-            }
+            this.vx *= this.friction;
+            this.vy *= this.friction;
+            this.vy += this.gravity;
+            this.x += this.vx;
+            this.y += this.vy;
+            this.alpha -= this.decay;
         }
 
         draw() {
+            if (this.alpha <= 0) return;
             ctx.save();
-            ctx.globalAlpha = Math.max(0, this.alpha);
+            ctx.globalCompositeOperation = 'lighter';
+            
+            let grad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.radius * 6);
+            grad.addColorStop(0, `hsla(${this.hue}, 100%, 70%, ${this.alpha})`);
+            grad.addColorStop(0.4, `hsla(${this.hue}, 100%, 50%, ${this.alpha * 0.8})`);
+            grad.addColorStop(1, 'transparent');
+            
+            ctx.fillStyle = grad;
             ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2, false);
-            ctx.fillStyle = this.color;
+            ctx.arc(this.x, this.y, this.radius * 6, 0, Math.PI * 2);
             ctx.fill();
-
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = this.color;
-
             ctx.restore();
         }
     }
 
-    function createFirework(x, y) {
-        playFireworkSound();
-        let numParticles = 50;
-        let hue = Math.random() * 360;
-        let color = 'hsl(' + hue + ', 100%, 60%)';
-
-        for (let i = 0; i < numParticles; i++) {
-            let angle = Math.random() * 2 * Math.PI;
-            let distance = 120 + Math.random() * 50;
-
-            particles.push(new Particle(x, y, color, angle, distance));
+    canvas.addEventListener('mousedown', (e) => {
+        if (music.paused) {
+            music.volume = 0.15;
+            music.play();
+            video.play();
         }
-    }
-
-    canvas.addEventListener('click', function (event) {
-        initAudioContext();
-        createFirework(event.clientX, event.clientY);
+        
+        playInternalPop();
+        
+        textAlpha = 1.0;
+        const hue = Math.random() * 360;
+        for (let i = 0; i < 80; i++) particles.push(new Particle(e.clientX, e.clientY, hue));
     });
 
-    function animate() {
-        requestAnimationFrame(animate);
-
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        for (let i = particles.length - 1; i >= 0; i--) {
-            const p = particles[i];
-
-            p.update();
-            p.draw();
-
-            if (p.alpha <= 0) {
-                particles.splice(i, 1);
-            }
-        }
+    function drawText() {
+        if (textAlpha <= 0) return;
+        ctx.save();
+        ctx.font = "bold 8vw Arial";
+        ctx.textAlign = "center";
+        ctx.shadowBlur = 25;
+        ctx.shadowColor = "gold";
+        ctx.fillStyle = `rgba(255, 255, 255, ${textAlpha})`;
+        ctx.fillText("HAPPY NEW YEAR!", canvas.width / 2, canvas.height / 2);
+        ctx.restore();
+        textAlpha -= 0.008;
     }
 
+    function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawText();
+        for (let i = particles.length - 1; i >= 0; i--) {
+            particles[i].update();
+            particles[i].draw();
+            if (particles[i].alpha <= 0) particles.splice(i, 1);
+        }
+        requestAnimationFrame(animate);
+    }
     animate();
 };

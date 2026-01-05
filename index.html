@@ -3,11 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fireworks Display</title>
+    <title>Happy New Year!</title>
     <link rel="stylesheet" href="styles/style.css">
-    <script type="text/javascript" src="scripts/fireworks.js"></script> 
 </head>
 <body>
+    <audio id="bgMusic" loop>
+        <source src="happy-new-year-abba.mp3" type="audio/mpeg">
+    </audio>
+
+    <video id="bgVideo" autoplay muted loop playsinline>
+        <source src="video-background.mp4" type="video/mp4">
+    </video>
+
     <canvas id="sky"></canvas>
+    
+    <script src="scripts/fireworks.js"></script>
 </body>
 </html>
